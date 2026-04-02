@@ -1,0 +1,46 @@
+# === Data (never upload) ===
+data/
+*.tif
+*.svs
+*.ndpi
+*.mrxs
+
+# === Model checkpoints ===
+outputs/
+test_results/
+*.pth
+*.pt
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# === Logs ===
+logs/
+*.log
+events.out.tfevents.*
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Jupyter ===
+.ipynb_checkpoints/
+
+# === Environment ===
+*.env
+.conda/
