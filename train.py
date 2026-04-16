@@ -31,12 +31,15 @@ def set_seed(seed=SEED):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.benchmark = True
 
 
-def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch):
+def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch, accum_steps=1):
     """
-    训练一个 epoch
+    训练一个 epoch（支持梯度累积）
+    
+    Args:
+        accum_steps: 梯度累积步数，等效 batch = batch_size * accum_steps
     
     Returns:
         avg_loss: 平均训练损失
@@ -45,9 +48,10 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch):
     total_loss = 0.0
     num_batches = 0
     
+    optimizer.zero_grad()
     pbar = tqdm(dataloader, desc=f"Epoch {epoch} [Train]")
     
-    for images, masks, stain_descs in pbar:
+    for step, (images, masks, stain_descs) in enumerate(pbar):
         # 移到 GPU
         images = images.to(device)
         masks = masks.to(device)
@@ -55,17 +59,20 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch):
         
         # 前向传播
         outputs = model(images, stain_descs)
-        loss = criterion(outputs, masks)
+        loss = criterion(outputs, masks) / accum_steps
         
-        # 反向传播
-        optimizer.zero_grad()
+        # 反向传播（累积梯度）
         loss.backward()
-        optimizer.step()
         
-        total_loss += loss.item()
+        # 每 accum_steps 步更新一次参数
+        if (step + 1) % accum_steps == 0 or (step + 1) == len(dataloader):
+            optimizer.step()
+            optimizer.zero_grad()
+        
+        total_loss += loss.item() * accum_steps
         num_batches += 1
         
-        pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+        pbar.set_postfix({"loss": f"{loss.item() * accum_steps:.4f}"})
     
     return total_loss / num_batches
 
@@ -153,6 +160,11 @@ def train(args):
     model = create_model(args.model)
     model = model.to(device)
     
+    #     # torch.compile for faster training
+    #     if hasattr(torch, "compile"):
+    #         print("Compiling model with torch.compile...")
+    #         model = torch.compile(model, mode="reduce-overhead")
+    
     # 打印参数量
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -174,8 +186,8 @@ def train(args):
         )
     
     if SCHEDULER == "cosine":
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=args.epochs
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, T_0=10, T_mult=2, eta_min=1e-6
         )
     elif SCHEDULER == "step":
         scheduler = torch.optim.lr_scheduler.StepLR(
@@ -201,7 +213,8 @@ def train(args):
     for epoch in range(1, args.epochs + 1):
         # 训练
         train_loss = train_one_epoch(
-            model, train_loader, criterion, optimizer, device, epoch
+            model, train_loader, criterion, optimizer, device, epoch,
+            accum_steps=getattr(args, 'accum_steps', 1)
         )
         train_losses.append(train_loss)
         

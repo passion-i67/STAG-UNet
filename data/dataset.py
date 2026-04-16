@@ -25,38 +25,79 @@ from configs.config import *
 
 def get_train_transforms(patch_size=PATCH_SIZE):
     """
-    训练时的数据增强
+    训练时的数据增强 (改进版 v2)
     
-    包含：水平翻转、垂直翻转、旋转、颜色抖动
-    这些增强可以增加数据多样性，防止过拟合
+    新增:
+    - ElasticTransform: 弹性变形,模拟组织切片变形
+    - GaussNoise + GaussianBlur: 模拟扫描噪声与聚焦差异
+    - HueSaturationValue: 更强颜色扰动,模拟染色差异(关键!)
+    - RandomResizedCrop: 多尺度学习
+    - CoarseDropout: 随机遮挡,提升鲁棒性
     """
     transforms = []
     
+    # 几何增强 (必做)
     if AUG_HORIZONTAL_FLIP:
         transforms.append(A.HorizontalFlip(p=0.5))
     if AUG_VERTICAL_FLIP:
         transforms.append(A.VerticalFlip(p=0.5))
-    
     transforms.append(A.RandomRotate90(p=0.5))
+    transforms.append(A.Transpose(p=0.3))
     
+    # 弹性变形 (病理图像专用,模拟组织形变)
+    transforms.append(
+        A.OneOf([
+            A.ElasticTransform(alpha=120, sigma=6, p=1.0),
+            A.GridDistortion(num_steps=5, distort_limit=0.3, p=1.0),
+        ], p=0.3)
+    )
+    
+    # 多尺度 (小概率,避免破坏染色描述符)
+    transforms.append(
+        A.RandomResizedCrop(
+            size=(patch_size, patch_size),
+            scale=(0.8, 1.0),
+            ratio=(0.9, 1.1),
+            p=0.3,
+        )
+    )
+    
+    # 颜色增强 (对病理图像尤其重要)
     if AUG_COLOR_JITTER:
         transforms.append(
             A.ColorJitter(
                 brightness=AUG_COLOR_BRIGHTNESS,
                 contrast=AUG_COLOR_CONTRAST,
-                saturation=0.1,
-                hue=0.05,
+                saturation=0.2,
+                hue=0.1,
                 p=0.5,
             )
         )
+    transforms.append(
+        A.HueSaturationValue(
+            hue_shift_limit=10,
+            sat_shift_limit=20,
+            val_shift_limit=15,
+            p=0.3,
+        )
+    )
     
-    # 归一化到 [0, 1] 并转为 PyTorch tensor
+    # 噪声与模糊 (模拟扫描器差异)
+    transforms.append(
+        A.OneOf([
+            A.GaussNoise(p=1.0),
+            A.GaussianBlur(blur_limit=(3, 5), p=1.0),
+        ], p=0.2)
+    )
+    
+    # 归一化 + 转 tensor (必须在最后)
     transforms.extend([
         A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ToTensorV2(),
     ])
     
     return A.Compose(transforms)
+
 
 
 def get_val_transforms():

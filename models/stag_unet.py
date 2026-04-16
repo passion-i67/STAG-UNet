@@ -23,7 +23,8 @@ STAG 模块原理：
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import timm  # 用来加载 EfficientNet
+import timm
+from models.cbam import CBAM  # 用来加载 EfficientNet
 
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -228,6 +229,7 @@ class STAGUNet(nn.Module):
         
         self.stag_gates = nn.ModuleList()
         self.decoder_blocks = nn.ModuleList()
+        self.cbam_blocks = nn.ModuleList()
         
         in_ch = self.bottleneck_channels  # 320
         
@@ -248,6 +250,8 @@ class STAGUNet(nn.Module):
             self.decoder_blocks.append(
                 DecoderBlock(in_ch, skip_ch, dec_ch)
             )
+            
+            self.cbam_blocks.append(CBAM(dec_ch))
             
             in_ch = dec_ch
         
@@ -314,6 +318,7 @@ class STAGUNet(nn.Module):
             
             # 解码器上采样 + 拼接
             x = decoder_block(x, attended_skip)
+            x = self.cbam_blocks[i](x)
         
         # ============================================================
         # 最终输出
