@@ -44,3 +44,37 @@ desktop.ini
 # === Environment ===
 *.env
 .conda/
+
+# Slurm logs
+*.err
+*.out
+
+# Experiment/temp scripts
+exp*.sh
+vis*.sh
+run_all*.sh
+run_bcss*.sh
+preprocess_*.sh
+filter_job.sh
+job_512_*.sh
+job_attn*.sh
+job_bcss*.sh
+job_eval*.sh
+job_fig*.sh
+job_select*.sh
+job_v9_*stable.sh
+submit_v9_baselines_stable.sh
+
+# Visualization/figure scripts (temp)
+find_*.py
+fix_*.py
+make_*.py
+select_*.py
+generate_attention_maps*.py
+infer_*.py
+eval_baselines.py
+run_v9_baseline_stable.py
+preprocess_bcss_for_stagunet.py
+
+# Old results
+test_results_round7/
